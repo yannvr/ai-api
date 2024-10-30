@@ -2,10 +2,10 @@
 import axios from 'axios'
 import { Anthropic } from '@anthropic-ai/sdk'
 
-export const sendPrompt = async (req, res) => {
+export const sendPrompt = async (req, res, next) => {
+  // console.log('req', req)
   const { prompt, provider } = req.body
-
-  const config = useRuntimeConfig()
+  console.log('req.body', req.body)
   const apiKeyOpenAI = process.env.OPENAI_API_KEY
   const apiKeyAnthropic = process.env.ANTHROPIC_API_KEY
 
@@ -16,10 +16,12 @@ export const sendPrompt = async (req, res) => {
     } else if (provider === 'anthropic') {
       response = await sendToAnthropic(prompt, apiKeyAnthropic);
     } else {
-      throw createError({ statusCode: 400, statusMessage: 'Invalid provider' });
+      return next({ statusCode: 400, statusMessage: 'Invalid provider' });
     }
+    console.log('response', response);
     res.status(200).json(response);
   } catch (error) {
+    console.log('Error sending prompt:', error);
     res.status(error.statusCode || 500).send(error.statusMessage || 'Failed to process prompt');
   }
 }
