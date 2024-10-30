@@ -7,14 +7,10 @@ export const fetchQuote = async (req, res) => {
         'Content-Type': 'application/json',
       },
     })
-    console.log('xxx')
     console.log('response', response)
     res.status(200).send(response.data)
   } catch (error) {
     console.error('Error fetching the quote:', error)
-    throw createError({
-      statusCode: 500,
-      statusMessage: 'Failed to fetch quote',
-    })
+    throw new Error('Failed to fetch quote')
   }
 }

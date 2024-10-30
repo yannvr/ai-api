@@ -22,7 +22,7 @@ export const sendPrompt = async (req, res, next) => {
     res.status(200).json(response);
   } catch (error) {
     console.log('Error sending prompt:', error);
-    res.status(error.statusCode || 500).send(error.statusMessage || 'Failed to process prompt');
+    res.status(500).send(error);
   }
 }
 
@@ -56,7 +56,7 @@ const sendToAnthropic = async (prompt, apiKey) => {
   console.log('prompt', prompt)
   console.log('apiKey', apiKey)
 
-  const response = await anthropic.messages.create({
+  const response: any = await anthropic.messages.create({
     model: 'claude-3-5-sonnet-20240620',
     max_tokens: 1024,
     messages: [{ role: 'user', content: prompt }],
