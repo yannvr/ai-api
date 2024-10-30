@@ -9,7 +9,7 @@ import { Anthropic } from "@anthropic-ai/sdk";
 type AnthropicRoles = "assistant" | "user";
 type OpenAIRoles = "system" | "assistant" | "user";
 
-interface Message {
+export interface Message {
   role: AnthropicRoles | OpenAIRoles;
   content: string;
 }

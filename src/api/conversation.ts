@@ -10,10 +10,18 @@ import dotenv from "dotenv";
 import zlib from "zlib";
 import util from "util";
 import { decompressData } from "../utils";
-import { Bot } from "./ai-bot";
+import { Bot, Message } from "./ai-bot";
 
 // Load environment variables
 dotenv.config();
+
+interface Conversation {
+  id: string | undefined;
+  text: string;
+  tags: string[];
+  messages: Message[];
+  summary: string;
+}
 
 // Ensure environment variables are defined
 const { CONF_AWS_REGION, CONF_AWS_ACCESS_KEY_ID, CONF_AWS_SECRET_ACCESS_KEY } =
@@ -36,14 +44,14 @@ const dynamoDBClient = new DynamoDBClient({
   },
 });
 
-export const saveConversation = async (conversationId, conversation) => {
+export const saveConversation = async (conversation: Conversation) => {
   // const compressedConversation = await compressData(conversation)
   const compressedConversation = conversation;
   const params = {
     TableName: "Conversations",
     Item: {
-      conversationId: { S: String(conversationId) },
-      conversation: { S: compressedConversation },
+      conversationId: { S: String(conversation.id) },
+      conversation: { S: conversation },
     },
   };
 
@@ -91,17 +99,23 @@ export const conversation = async (req, res) => {
   const bot = new Bot(provider, apiKey!);
 
   try {
-    let conversation = await getConversation(conversationId);
+    let conversation: Conversation = await getConversation(conversationId);
+
     if (!conversation) {
-      conversation = { conversationId, conversation: [] };
+      console.log("starting new conversation");
+      conversation = {
+        id: undefined,
+        text: "",
+        tags: [],
+        messages: [{ role: "user", content: prompt }],
+        summary: "", // Add summary property
+      };
     }
 
-    conversation.conversation.push({ role: "user", content: prompt });
+    const response = await bot.send(conversation.messages);
 
-    const response = await bot.send(conversation.conversation);
-
-    conversation.conversation.push({ role: "assistant", content: response });
-    await saveConversation(conversationId, conversation.conversation);
+    conversation.messages.push({ role: "assistant", content: response });
+    await saveConversation(conversation);
 
     res.status(200).json({ response });
   } catch (error) {
