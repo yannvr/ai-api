@@ -1,10 +1,6 @@
-/* Example usage:
-const openAIBot = new Bot('openai', process.env.OPENAI_API_KEY!);
-const anthropicBot = new Bot('anthropic', process.env.ANTHROPIC_API_KEY!);
-*/
-
 import axios from "axios";
 import { Anthropic } from "@anthropic-ai/sdk";
+import { saveConversation } from "./conversation";
 
 type AnthropicRoles = "assistant" | "user";
 type OpenAIRoles = "system" | "assistant" | "user";
@@ -14,8 +10,16 @@ export interface Message {
   content: string;
 }
 
+export interface Conversation {
+  id: string | undefined;
+  text: string;
+  tags: string[];
+  messages: Message[];
+  summary: string;
+}
+
 class Bot {
-  private apiKey: string;
+  apiKey: string;
   private provider: "openai" | "anthropic";
 
   constructor(provider: "openai" | "anthropic", apiKey: string) {
@@ -23,22 +27,24 @@ class Bot {
     this.apiKey = apiKey;
   }
 
-  public async send(messages: Message[]): Promise<string> {
-    let summary = "";
-    if (messages.length > 1) {
-      summary = await this.summarize(messages);
+  public async send(conversation: Conversation): Promise<string> {
+    if (conversation.messages.length > 1) {
+      conversation.summary = await this.summarize(conversation.messages);
     }
 
     if (this.provider === "openai") {
-      return this.sendToChatGPT(messages, summary);
+      await saveConversation(conversation);
+      return this.sendToChatGPT(conversation);
     } else if (this.provider === "anthropic") {
-      return this.sendToAnthropic(messages, summary);
+      console.log("CONVERSATION.SUMMARY", conversation.summary);
+      await saveConversation(conversation);
+      return this.sendToAnthropic(conversation);
     } else {
       throw new Error("Invalid provider");
     }
   }
 
-  private async summarize(messages: Message[]): Promise<string> {
+  public async summarize(messages: Message[]): Promise<string> {
     if (this.provider === "openai") {
       return this.summarizeWithChatGPT(messages);
     } else if (this.provider === "anthropic") {
@@ -71,12 +77,7 @@ class Bot {
         },
       }
     );
-    const conversationSummary = response.data.choices[0].message.content;
-    console.log(
-      "🚀 ~ Bot ~ summarizeWithChatGPT ~ conversationSummary:",
-      conversationSummary
-    );
-    return conversationSummary;
+    return response.data.choices[0].message.content;
   }
 
   private async summarizeWithAnthropic(messages: Message[]): Promise<string> {
@@ -107,64 +108,62 @@ class Bot {
     return conversationSummary;
   }
 
-  private async sendToChatGPT(
-    messages: Message[],
-    summary: string
-  ): Promise<string> {
+  private async sendToChatGPT(conversation: Conversation): Promise<string> {
     const apiUrl = "https://api.openai.com/v1/chat/completions";
-    const response = await axios.post(
-      apiUrl,
-      {
-        model: "gpt-3.5-turbo",
-        messages: summary
-          ? [
-              {
-                role: "system",
-                content:
-                  "Use the following summary to maintain context: " + summary,
-              },
-              ...messages,
-            ]
-          : messages,
+    const requestBody: any = {
+      model: "gpt-3.5-turbo",
+      messages: conversation.summary
+        ? [
+            {
+              role: "system",
+              content:
+                "Use the following summary to maintain context: " +
+                conversation.summary,
+            },
+            ...conversation.messages,
+          ]
+        : conversation.messages,
+    };
+
+    const response = await axios.post(apiUrl, requestBody, {
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
       },
-      {
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    });
     return response.data.choices[0].message.content;
   }
 
-  private async sendToAnthropic(
-    messages: Message[],
-    summary?: string
-  ): Promise<string> {
+  private async sendToAnthropic(conversation: Conversation): Promise<string> {
     const anthropic = new Anthropic({
       apiKey: this.apiKey,
     });
 
-    console.log("summary", summary);
-    const _messages = summary
+    console.log("summary", conversation.summary);
+    const _messages = conversation.summary
       ? [
           {
             role: "assistant",
             content:
-              "Use the following summary to maintain context: " + summary,
+              "Use the following summary to maintain context: " +
+              conversation.summary,
           },
-          ...messages.map((msg) => ({ role: "user", content: msg.content })),
+          ...conversation.messages.map((msg) => ({
+            role: "user",
+            content: msg.content,
+          })),
         ]
-      : messages.map((msg) => ({ role: "user", content: msg.content }));
+      : conversation.messages.map((msg) => ({
+          role: "user",
+          content: msg.content,
+        }));
 
-    console.log("_messages", _messages);
 
-    const response: Anthropic.Messages.Message =
-      await anthropic.messages.create({
-        model: "claude-3-5-sonnet-20240620",
-        max_tokens: 1024,
-        messages: _messages,
-      });
+    const response: any = await anthropic.messages.create({
+      model: "claude-3-5-sonnet-20240620",
+      max_tokens: 1024,
+      messages: _messages,
+    });
 
     console.log("response", response);
 
@@ -172,4 +171,8 @@ class Bot {
   }
 }
 
-export { Bot };
+// Example usage:
+const openAIBot = new Bot("openai", process.env.OPENAI_API_KEY!);
+const anthropicBot = new Bot("anthropic", process.env.ANTHROPIC_API_KEY!);
+
+export { Bot, Conversation, Message };

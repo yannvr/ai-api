@@ -1,5 +1,3 @@
-import axios from "axios";
-import { Anthropic } from "@anthropic-ai/sdk";
 import {
   DynamoDBClient,
   GetItemCommand,
@@ -7,11 +5,8 @@ import {
   PutItemCommand,
 } from "@aws-sdk/client-dynamodb";
 import dotenv from "dotenv";
-import zlib from "zlib";
-import util from "util";
 import { compressData, decompressData } from "../utils";
-import { Bot, Message } from "./ai-bot";
-import _ from "lodash";
+import { Bot, Conversation } from "./ai-bot";
 
 // Load environment variables
 dotenv.config();
@@ -55,6 +50,8 @@ export const saveConversation = async (conversation: Conversation) => {
       conversation: { S: conversationData },
     },
   };
+
+  console.log('SAVING CONVERSATION:', conversationId, conversationData);
 
   try {
     await dynamoDBClient.send(new PutItemCommand(params));
@@ -115,15 +112,13 @@ export const conversation = async (req, res) => {
 
     if (conversationId) {
       _conversation = await getConversation(conversationId);
-      console.log("continuing conversation", _conversation);
+      console.log("continuing conversation");
     } else {
-      console.log("starting new conversation", _conversation);
+      console.log("starting new conversation");
     }
 
-    const response = await bot.send(_conversation.messages);
+    const response = await bot.send(_conversation);
 
-    _conversation.messages.push({ role: "assistant", content: response });
-    await saveConversation(_conversation);
 
     res.status(200).json({ response });
   } catch (error) {
