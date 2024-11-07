@@ -7,6 +7,7 @@ import {
 import dotenv from "dotenv";
 import { compressData, decompressData } from "../utils";
 import { Bot, Conversation } from "./ai-bot";
+import _ from "lodash";
 
 // Load environment variables
 dotenv.config();
@@ -34,6 +35,7 @@ const dynamoDBClient = new DynamoDBClient({
 });
 
 export const saveConversation = async (conversation: Conversation) => {
+  console.log('about to save conversation', conversation);
   let conversationData: Conversation | any = conversation;
   if (process.env.USE_COMPRESSION === "1") {
     conversationData = await compressData(conversation);
@@ -79,7 +81,7 @@ export const getConversation = async (conversationId) => {
       if (process.env.USE_COMPRESSION === "1") {
         return await decompressData(data.Item.conversation.S);
       } else {
-        return JSON.parse(data.Item.conversation.S);
+        return JSON.parse(data.Item.conversation.S!);
       }
     }
   } catch (error: unknown) {
@@ -103,24 +105,41 @@ export const conversation = async (req, res) => {
 
   try {
     let _conversation: Conversation = {
-      id: undefined,
+      id: conversationId || undefined,
       text: "",
       tags: [],
       messages: [{ role: "user", content: prompt }],
       summary: "", // Add summary property
     };
+    let savedConversation: Conversation | null = null;
 
     if (conversationId) {
-      _conversation = await getConversation(conversationId);
-      console.log("continuing conversation");
+      savedConversation = await getConversation(conversationId);
+      if (savedConversation) {
+        // Append context to the conversation
+        _conversation.summary = savedConversation.summary;
+      }
+      console.log("continuing conversation:", _conversation);
     } else {
       console.log("starting new conversation");
     }
 
-    const response = await bot.send(_conversation);
+    // AI response to the user message
+    const aiResponseMessage = await bot.send(_conversation);
+
+    if(savedConversation) {
+      // Keep history of messages
+      _conversation.messages = [
+        ...savedConversation.messages,
+        ..._conversation.messages,
+      ];
+    }
+    // Append bot response to the conversation messages
+    _conversation.messages.push(aiResponseMessage);
+    await saveConversation(_conversation);
 
 
-    res.status(200).json({ response });
+    res.status(200).json({ conversation: _conversation });
   } catch (error) {
     console.error("Error processing conversation:", error);
     res.status(500).send("Failed to process conversation");

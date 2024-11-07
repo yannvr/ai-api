@@ -27,34 +27,34 @@ class Bot {
     this.apiKey = apiKey;
   }
 
-  public async send(conversation: Conversation): Promise<string> {
-    if (conversation.messages.length > 1) {
-      conversation.summary = await this.summarize(conversation.messages);
-    }
+  public async send(conversation: Conversation): Promise<Message> {
 
     if (this.provider === "openai") {
-      await saveConversation(conversation);
+      if (conversation.messages.length > 0) {
+        conversation.summary = await this.summarize(conversation);
+      }
       return this.sendToChatGPT(conversation);
     } else if (this.provider === "anthropic") {
-      console.log("CONVERSATION.SUMMARY", conversation.summary);
-      await saveConversation(conversation);
+      if (conversation.messages.length > 0) {
+        conversation.summary = await this.summarize(conversation);
+      }
       return this.sendToAnthropic(conversation);
     } else {
       throw new Error("Invalid provider");
     }
   }
 
-  public async summarize(messages: Message[]): Promise<string> {
+  public async summarize(conversation: Conversation): Promise<string> {
     if (this.provider === "openai") {
-      return this.summarizeWithChatGPT(messages);
+      return this.summarizeWithChatGPT(conversation);
     } else if (this.provider === "anthropic") {
-      return this.summarizeWithAnthropic(messages);
+      return this.summarizeWithAnthropic(conversation);
     } else {
       throw new Error("Invalid provider");
     }
   }
 
-  private async summarizeWithChatGPT(messages: Message[]): Promise<string> {
+  private async summarizeWithChatGPT(conversation: Conversation): Promise<string> {
     const apiUrl = "https://api.openai.com/v1/chat/completions";
     const response = await axios.post(
       apiUrl,
@@ -80,26 +80,34 @@ class Bot {
     return response.data.choices[0].message.content;
   }
 
-  private async summarizeWithAnthropic(messages: Message[]): Promise<string> {
+  private async summarizeWithAnthropic(conversation: Conversation): Promise<string> {
     const anthropic = new Anthropic({
       apiKey: this.apiKey,
     });
+    let summaryPrompt;
+    console.log("🚀 ~ Bot ~ summarizeWithAnthropic ~ conversation:", conversation)
+
+    if (!conversation.summary) {
+      summaryPrompt = `Summarize the following conversation with key points.
+      The summary should be as short as possible and only include the minimum required to maintain context: "${conversation.messages[0].content}"`;
+    } else {
+      summaryPrompt = `Update the summary "${conversation.summary}" combined with the latest message "${conversation.messages[0].content}" if the latest message is not question and helps build a meaningful context.
+      The summary should be as short as possible and only include the minimum required to maintain context`;
+    }
+    console.log("🚀 ~ Bot ~ summarizeWithAnthropic ~ summaryPrompt:", summaryPrompt)
+
 
     const response: any = await anthropic.messages.create({
       model: "claude-3-5-sonnet-20240620",
       max_tokens: 50,
       messages: [
         {
-          role: "assistant",
-          content:
-            "Summarize the following conversation with key points. The summary should be as short as possible and only include the minimum required to maintain context.",
-        },
-        ...messages.map((msg) => ({
-          role: "user",
-          content: msg.content,
-        })),
+          role: "user" as AnthropicRoles,
+          content: summaryPrompt,
+          }
       ],
     });
+    console.log("🚀 ~ Bot ~ summarizeWithAnthropic ~ response:", response);
     const conversationSummary = response.content[0].text;
     console.log(
       "🚀 ~ Bot ~ summarizeWithAnthropic ~ conversationSummary:",
@@ -134,40 +142,35 @@ class Bot {
     return response.data.choices[0].message.content;
   }
 
-  private async sendToAnthropic(conversation: Conversation): Promise<string> {
+  private async sendToAnthropic(conversation: Conversation): Promise<Message> {
     const anthropic = new Anthropic({
       apiKey: this.apiKey,
     });
 
-    console.log("summary", conversation.summary);
-    const _messages = conversation.summary
-      ? [
-          {
-            role: "assistant",
-            content:
-              "Use the following summary to maintain context: " +
-              conversation.summary,
-          },
-          ...conversation.messages.map((msg) => ({
-            role: "user",
-            content: msg.content,
-          })),
-        ]
-      : conversation.messages.map((msg) => ({
-          role: "user",
-          content: msg.content,
-        }));
+    let prompt = conversation.messages[0].content;
 
+    if (conversation.summary) {
+      prompt = `Use the following summary to maintain context: ${conversation.summary} and reply to the latest message: ${conversation.messages[0].content}`;
+    }
 
+    console.log("sendToAnthropic ~ conversation", prompt);
     const response: any = await anthropic.messages.create({
       model: "claude-3-5-sonnet-20240620",
       max_tokens: 1024,
-      messages: _messages,
+      messages: [
+        {
+          role: "user",
+          content: prompt,
+        }
+      ]
     });
+    console.log("🚀 ~ Bot ~ sendToAnthropic ~ response:", response)
 
-    console.log("response", response);
 
-    return response.content[0].text;
+    return {
+      role: "assistant",
+      content: response.content[0].text
+    }
   }
 }
 
@@ -175,4 +178,4 @@ class Bot {
 const openAIBot = new Bot("openai", process.env.OPENAI_API_KEY!);
 const anthropicBot = new Bot("anthropic", process.env.ANTHROPIC_API_KEY!);
 
-export { Bot, Conversation, Message };
+export { Bot };

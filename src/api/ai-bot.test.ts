@@ -1,4 +1,4 @@
-import { aiBot } from '../api/ai-bot';
+import { Bot } from '../api/ai-bot';
 
 describe('ai-bot API', () => {
   test('Test case 1', () => {
