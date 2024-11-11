@@ -12,7 +12,7 @@ export interface Message {
 
 export interface Conversation {
   id: string | undefined;
-  text: string;
+  name: string;
   tags: string[];
   messages: Message[];
   summary: string;
@@ -91,8 +91,9 @@ class Bot {
       summaryPrompt = `Summarize the following conversation with key points.
       The summary should be as short as possible and only include the minimum required to maintain context: "${conversation.messages[0].content}"`;
     } else {
-      summaryPrompt = `Update the summary "${conversation.summary}" combined with the latest message "${conversation.messages[0].content}" if the latest message is not question and helps build a meaningful context.
-      The summary should be as short as possible and only include the minimum required to maintain context`;
+      summaryPrompt = `
+      - if the latest message provides information about the user then update summary "${conversation.summary}" combined with the latest message "${conversation.messages[0].content}"
+      - Otherwise, reply with "${conversation.summary}".`
     }
     console.log("🚀 ~ Bot ~ summarizeWithAnthropic ~ summaryPrompt:", summaryPrompt)
 
@@ -175,7 +176,7 @@ class Bot {
 }
 
 // Example usage:
-const openAIBot = new Bot("openai", process.env.OPENAI_API_KEY!);
-const anthropicBot = new Bot("anthropic", process.env.ANTHROPIC_API_KEY!);
+// const openAIBot = new Bot("openai", process.env.OPENAI_API_KEY!);
+// const anthropicBot = new Bot("anthropic", process.env.ANTHROPIC_API_KEY!);
 
 export { Bot };

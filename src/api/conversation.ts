@@ -57,13 +57,14 @@ export const saveConversation = async (conversation: Conversation) => {
 
   try {
     await dynamoDBClient.send(new PutItemCommand(params));
+    return conversationId;
   } catch (error) {
     console.error("Error saving conversation:", error);
     throw new Error("Failed to save conversation");
   }
 };
 
-export const getConversation = async (conversationId) => {
+export const getConversation = async (conversationId): Promise<Conversation | undefined> => {
   console.log("conversationId", conversationId);
   const params = {
     TableName: "conversations",
@@ -79,7 +80,7 @@ export const getConversation = async (conversationId) => {
     console.log("data", data);
     if (data.Item) {
       if (process.env.USE_COMPRESSION === "1") {
-        return await decompressData(data.Item.conversation.S);
+        return await decompressData(data.Item.conversation.S) as Conversation;
       } else {
         return JSON.parse(data.Item.conversation.S!);
       }
@@ -87,7 +88,6 @@ export const getConversation = async (conversationId) => {
   } catch (error: unknown) {
     if (error instanceof Error && error.name === "ResourceNotFoundException") {
       console.warn("Resource not found:", error.message);
-      return null;
     } else {
       console.error("Error getting conversation:", error);
       throw new Error("Failed to get conversation");
@@ -95,7 +95,7 @@ export const getConversation = async (conversationId) => {
   }
 };
 
-export const conversation = async (req, res) => {
+export const conversation = async (req, res): Promise<Conversation | void> => {
   const { prompt, provider, conversationId } = req.body;
   const apiKey =
     provider === "openai"
@@ -104,9 +104,8 @@ export const conversation = async (req, res) => {
   const bot = new Bot(provider, apiKey!);
 
   try {
-    let _conversation: Conversation = {
-      id: conversationId || undefined,
-      text: "",
+    let _conversation: Partial<Conversation> = {
+      name: "",
       tags: [],
       messages: [{ role: "user", content: prompt }],
       summary: "", // Add summary property
@@ -136,12 +135,30 @@ export const conversation = async (req, res) => {
     }
     // Append bot response to the conversation messages
     _conversation.messages.push(aiResponseMessage);
-    await saveConversation(_conversation);
+    const savedConversationId = await saveConversation(_conversation);
+    _conversation.id = savedConversationId;
 
 
     res.status(200).json({ conversation: _conversation });
   } catch (error) {
     console.error("Error processing conversation:", error);
     res.status(500).send("Failed to process conversation");
+  }
+};
+
+export const getConversationById = async (req, res) => {
+  console.log('req', req.query);
+  const { id } = req.query;
+
+  try {
+    const conversation = await getConversation(id);
+    if (conversation) {
+      res.status(200).json(conversation);
+    } else {
+      res.status(404).json({ message: "Conversation not found" });
+    }
+  } catch (error) {
+    console.error("Error getting conversation:", error);
+    res.status(500).json({ message: "Failed to get conversation" });
   }
 };
