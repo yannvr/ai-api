@@ -179,8 +179,6 @@ export const getConversations = async (req, res) => {
     ScanIndexForward: false, // Sort by ID in descending order
   };
 
-  console.log("params", params);
-
   try {
     const data: ScanCommandOutput = await dynamoDBClient.send(
       new ScanCommand(params)
@@ -194,5 +192,48 @@ export const getConversations = async (req, res) => {
   } catch (error) {
     console.error("Error getting conversations:", error);
     res.status(500).json({ message: "Failed to get conversations" });
+  }
+};
+
+export const addTag = async (req, res) => {
+  const { conversationId, tag } = req.body;
+
+  console.log("conversationId", conversationId);
+  console.log("tag", tag);
+
+  try {
+    const conversation = await getConversation(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ message: "Conversation not found" });
+    }
+
+    if (!conversation.tags.includes(tag)) {
+      conversation.tags.push(tag);
+    }
+    await saveConversation(conversation);
+
+    res.status(200);
+  } catch (error) {
+    console.error("Error adding tag:", error);
+    res.status(500).json({ message: "Failed to add tag" });
+  }
+};
+
+export const removeTag = async (req, res) => {
+  const { conversationId, tag } = req.body;
+
+  try {
+    const conversation = await getConversation(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ message: "Conversation not found" });
+    }
+
+    conversation.tags = conversation.tags.filter(t => t !== tag);
+    await saveConversation(conversation);
+
+    res.status(200);
+  } catch (error) {
+    console.error("Error removing tag:", error);
+    res.status(500).json({ message: "Failed to remove tag" });
   }
 };
