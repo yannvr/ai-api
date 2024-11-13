@@ -38,6 +38,12 @@ const dynamoDBClient = new DynamoDBClient({
 export const saveConversation = async (conversation: Conversation) => {
   console.log("about to save conversation", conversation);
   let conversationData: Conversation | any = conversation;
+  if (!conversationData.name) {
+    // Generate a name for the conversation using the first 5 words of the prompt
+    const firstMessage = conversation.messages[0]?.content || "";
+    const firstFiveWords = firstMessage.split(" ").slice(0, 5).join(" ");
+    conversationData.name = firstFiveWords || "Untitled Conversation";
+  }
   if (process.env.USE_COMPRESSION === "1") {
     conversationData = await compressData(conversation);
   } else {
@@ -181,7 +187,7 @@ export const getConversations = async (req, res) => {
     );
     let conversations = [];
     if (data.Items?.length > 0) {
-      conversations = data.Items.map((c) => JSON.parse(c.conversation.S));
+      conversations = data.Items.map((c) => ({ ...JSON.parse(c.conversation.S), id: c.conversationId.S }));
     }
 
     res.status(200).json({ conversations });
