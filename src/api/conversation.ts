@@ -3,6 +3,8 @@ import {
   GetItemCommand,
   GetItemCommandOutput,
   PutItemCommand,
+  ScanCommand,
+  ScanCommandOutput,
 } from "@aws-sdk/client-dynamodb";
 import dotenv from "dotenv";
 import { compressData, decompressData } from "../utils";
@@ -11,7 +13,6 @@ import _ from "lodash";
 
 // Load environment variables
 dotenv.config();
-
 
 // Ensure environment variables are defined
 const { CONF_AWS_REGION, CONF_AWS_ACCESS_KEY_ID, CONF_AWS_SECRET_ACCESS_KEY } =
@@ -35,7 +36,7 @@ const dynamoDBClient = new DynamoDBClient({
 });
 
 export const saveConversation = async (conversation: Conversation) => {
-  console.log('about to save conversation', conversation);
+  console.log("about to save conversation", conversation);
   let conversationData: Conversation | any = conversation;
   if (process.env.USE_COMPRESSION === "1") {
     conversationData = await compressData(conversation);
@@ -53,7 +54,7 @@ export const saveConversation = async (conversation: Conversation) => {
     },
   };
 
-  console.log('SAVING CONVERSATION:', conversationId, conversationData);
+  console.log("SAVING CONVERSATION:", conversationId, conversationData);
 
   try {
     await dynamoDBClient.send(new PutItemCommand(params));
@@ -64,7 +65,9 @@ export const saveConversation = async (conversation: Conversation) => {
   }
 };
 
-export const getConversation = async (conversationId): Promise<Conversation | undefined> => {
+export const getConversation = async (
+  conversationId
+): Promise<Conversation | undefined> => {
   console.log("conversationId", conversationId);
   const params = {
     TableName: "conversations",
@@ -80,7 +83,7 @@ export const getConversation = async (conversationId): Promise<Conversation | un
     console.log("data", data);
     if (data.Item) {
       if (process.env.USE_COMPRESSION === "1") {
-        return await decompressData(data.Item.conversation.S) as Conversation;
+        return (await decompressData(data.Item.conversation.S)) as Conversation;
       } else {
         return JSON.parse(data.Item.conversation.S!);
       }
@@ -126,7 +129,7 @@ export const conversation = async (req, res): Promise<Conversation | void> => {
     // AI response to the user message
     const aiResponseMessage = await bot.send(_conversation);
 
-    if(savedConversation) {
+    if (savedConversation) {
       // Keep history of messages
       _conversation.messages = [
         ...savedConversation.messages,
@@ -138,7 +141,6 @@ export const conversation = async (req, res): Promise<Conversation | void> => {
     const savedConversationId = await saveConversation(_conversation);
     _conversation.id = savedConversationId;
 
-
     res.status(200).json({ conversation: _conversation });
   } catch (error) {
     console.error("Error processing conversation:", error);
@@ -147,7 +149,6 @@ export const conversation = async (req, res): Promise<Conversation | void> => {
 };
 
 export const getConversationById = async (req, res) => {
-  console.log('req', req.query);
   const { id } = req.query;
 
   try {
@@ -160,5 +161,32 @@ export const getConversationById = async (req, res) => {
   } catch (error) {
     console.error("Error getting conversation:", error);
     res.status(500).json({ message: "Failed to get conversation" });
+  }
+};
+
+export const getConversations = async (req, res) => {
+  const { limit = 10 } = req.query;
+
+  const params = {
+    TableName: "conversations",
+    Limit: Number(limit),
+    ScanIndexForward: false, // Sort by ID in descending order
+  };
+
+  console.log("params", params);
+
+  try {
+    const data: ScanCommandOutput = await dynamoDBClient.send(
+      new ScanCommand(params)
+    );
+    let conversations = [];
+    if (data.Items?.length > 0) {
+      conversations = data.Items.map((c) => JSON.parse(c.conversation.S));
+    }
+
+    res.status(200).json({ conversations });
+  } catch (error) {
+    console.error("Error getting conversations:", error);
+    res.status(500).json({ message: "Failed to get conversations" });
   }
 };

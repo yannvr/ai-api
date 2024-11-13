@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import { fetchQuote } from './api/fetchQuote';
 import corsMiddleware from './middleware/cors';
 import { sendPrompt } from './api/sendPrompt';
-import { conversation, getConversationById } from './api/conversation';
+import { conversation, getConversationById, getConversations } from './api/conversation';
 
 dotenv.config();
 
@@ -18,6 +18,7 @@ app.use(express.json());
 
 app.get('/conversation', getConversationById);
 app.post('/conversation', conversation);
+app.get('/conversations', getConversations); // Add this line to define the GET /conversations endpoint
 app.post('/sendPrompt', sendPrompt);
 app.get('/fetchQuote', fetchQuote);
 
