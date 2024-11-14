@@ -5,6 +5,7 @@ import {
   PutItemCommand,
   ScanCommand,
   ScanCommandOutput,
+  UpdateItemCommand,
 } from "@aws-sdk/client-dynamodb";
 import dotenv from "dotenv";
 import { compressData, decompressData } from "../utils";
@@ -35,7 +36,10 @@ const dynamoDBClient = new DynamoDBClient({
   },
 });
 
-export const saveConversation = async (conversation: Conversation) => {
+export const saveConversation = async (
+  conversation: Conversation,
+  conversationId: number
+) => {
   console.log("about to save conversation", conversation);
   let conversationData: Conversation | any = conversation;
   if (!conversationData.name) {
@@ -50,31 +54,47 @@ export const saveConversation = async (conversation: Conversation) => {
     conversationData = JSON.stringify(conversation);
   }
 
-  const conversationId = conversation.id || Date.now();
-
-  const params = {
-    TableName: "conversations",
-    Item: {
-      conversationId: { S: String(conversationId) },
-      conversation: { S: conversationData },
-    },
-  };
-
-  console.log("SAVING CONVERSATION:", conversationId, conversationData);
 
   try {
-    await dynamoDBClient.send(new PutItemCommand(params));
-    return conversationId;
-  } catch (error) {
-    console.error("Error saving conversation:", error);
-    throw new Error("Failed to save conversation");
+    if (!conversationId) {
+      let conversationId = Date.now();
+      let params = {
+        TableName: "conversations",
+        Item: {
+          conversationId: { S: String(conversationId) },
+          conversation: { S: conversationData },
+        },
+      };
+      console.log(
+        "SAVING NEW CONVERSATION:",
+        conversationId,
+        conversationData
+      );
+      await dynamoDBClient.send(new PutItemCommand(params));
+    } else {
+      let params = {
+        TableName: "conversations",
+        Key: {
+          conversationId: { S: String(conversationId) },
+        },
+        UpdateExpression: "SET conversation = :conversation",
+        ExpressionAttributeValues: {
+          ":conversation": { S: conversationData },
+        },
+        ReturnValues: "ALL_NEW" as const,
+      };
+
+      console.log("UPDATING CONVERSATION:", conversationId, conversationData);
+      await dynamoDBClient.send(new UpdateItemCommand(params));
+    }
+  } catch (error: any) {
+    throw new Error("Error saving conversation:", error);
   }
 };
 
 export const getConversation = async (
   conversationId
 ): Promise<Conversation | undefined> => {
-  console.log("conversationId", conversationId);
   const params = {
     TableName: "conversations",
     Key: {
@@ -86,7 +106,6 @@ export const getConversation = async (
     const data: GetItemCommandOutput = await dynamoDBClient.send(
       new GetItemCommand(params)
     );
-    console.log("data", data);
     if (data.Item) {
       if (process.env.USE_COMPRESSION === "1") {
         return (await decompressData(data.Item.conversation.S)) as Conversation;
@@ -185,7 +204,10 @@ export const getConversations = async (req, res) => {
     );
     let conversations = [];
     if (data.Items?.length > 0) {
-      conversations = data.Items.map((c) => ({ ...JSON.parse(c.conversation.S), id: c.conversationId.S }));
+      conversations = data.Items.map((c) => ({
+        ...JSON.parse(c.conversation.S),
+        id: c.conversationId.S,
+      }));
     }
 
     res.status(200).json({ conversations });
@@ -210,12 +232,38 @@ export const addTag = async (req, res) => {
     if (!conversation.tags.includes(tag)) {
       conversation.tags.push(tag);
     }
-    await saveConversation(conversation);
+    await saveConversation(conversation, conversationId);
 
-    res.status(200);
+    res.status(200).send("ok");
   } catch (error) {
     console.error("Error adding tag:", error);
     res.status(500).json({ message: "Failed to add tag" });
+  }
+};
+
+export const editTag = async (req, res) => {
+  const { conversationId, oldTag, newTag } = req.body;
+
+  try {
+    const conversation = await getConversation(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ message: "Conversation not found" });
+    }
+    console.log("req.body", req.body);
+    console.log("conversation", conversation);
+
+    const tagIndex = conversation.tags.indexOf(oldTag);
+    if (tagIndex !== -1) {
+      conversation.tags[tagIndex] = newTag;
+    } else {
+      return res.status(404).json({ message: "Tag not found" });
+    }
+    await saveConversation(conversation, conversationId);
+
+    res.status(200).send("ok");
+  } catch (error) {
+    console.error("Error updating tag:", error);
+    res.status(500).json({ message: "Failed to update tag" });
   }
 };
 
@@ -227,11 +275,14 @@ export const removeTag = async (req, res) => {
     if (!conversation) {
       return res.status(404).json({ message: "Conversation not found" });
     }
+    console.log("conversation", conversation);
+    console.log("conversation.tags", conversation.tags);
 
-    conversation.tags = conversation.tags.filter(t => t !== tag);
-    await saveConversation(conversation);
+    conversation.tags = conversation.tags.filter((t) => t !== tag);
+    console.log("conversation without tag", conversation);
+    await saveConversation(conversation, conversationId);
 
-    res.status(200);
+    res.status(200).send("ok");
   } catch (error) {
     console.error("Error removing tag:", error);
     res.status(500).json({ message: "Failed to remove tag" });
