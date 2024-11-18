@@ -1,6 +1,5 @@
 import axios from "axios";
 import { Anthropic } from "@anthropic-ai/sdk";
-import { saveConversation } from "./conversation";
 
 type AnthropicRoles = "assistant" | "user";
 type OpenAIRoles = "system" | "assistant" | "user";
@@ -147,6 +146,8 @@ class Bot {
     const anthropic = new Anthropic({
       apiKey: this.apiKey,
     });
+
+    console.log("sendToAnthropic ~ conversation", conversation);
 
     let prompt = conversation.messages[0].content;
 

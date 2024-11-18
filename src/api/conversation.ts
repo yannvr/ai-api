@@ -3,13 +3,14 @@ import {
   GetItemCommand,
   GetItemCommandOutput,
   PutItemCommand,
+  UpdateItemCommand,
   ScanCommand,
   ScanCommandOutput,
-  UpdateItemCommand,
 } from "@aws-sdk/client-dynamodb";
+import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import dotenv from "dotenv";
 import { compressData, decompressData } from "../utils";
-import { Bot, Conversation } from "./ai-bot";
+import { Bot, Conversation, Message } from "./ai-bot";
 import _ from "lodash";
 
 // Load environment variables
@@ -38,67 +39,43 @@ const dynamoDBClient = new DynamoDBClient({
 
 export const saveConversation = async (
   conversation: Conversation,
-  conversationId: number
 ) => {
   console.log("about to save conversation", conversation);
-  let conversationData: Conversation | any = conversation;
-  if (!conversationData.name) {
-    // Generate a name for the conversation using the first 5 words of the prompt
-    const firstMessage = conversation.messages[0]?.content || "";
-    const firstFiveWords = firstMessage.split(" ").slice(0, 5).join(" ");
-    conversationData.name = firstFiveWords || "Untitled Conversation";
-  }
-  if (process.env.USE_COMPRESSION === "1") {
-    conversationData = await compressData(conversation);
-  } else {
-    conversationData = JSON.stringify(conversation);
-  }
+  const conversationId = Date.now().toString();
+  // if (!conversation.name) {
+  //   // Generate a name for the conversation using the first 5 words of the prompt
+  //   const firstMessage = conversation.messages[0]?.content || "";
+  //   const firstFiveWords = firstMessage.split(" ").slice(0, 5).join(" ");
+  //   conversation.name = firstFiveWords || "Untitled Conversation";
+  // }
 
+  const params = {
+    TableName: "conversations",
+    Item: marshall({
+      conversationId,
+      ...conversation,
+    }),
+  };
+
+  console.log("SAVING CONVERSATION:", conversation);
 
   try {
-    if (!conversationId) {
-      let conversationId = Date.now();
-      let params = {
-        TableName: "conversations",
-        Item: {
-          conversationId: { S: String(conversationId) },
-          conversation: { S: conversationData },
-        },
-      };
-      console.log(
-        "SAVING NEW CONVERSATION:",
-        conversationId,
-        conversationData
-      );
-      await dynamoDBClient.send(new PutItemCommand(params));
-    } else {
-      let params = {
-        TableName: "conversations",
-        Key: {
-          conversationId: { S: String(conversationId) },
-        },
-        UpdateExpression: "SET conversation = :conversation",
-        ExpressionAttributeValues: {
-          ":conversation": { S: conversationData },
-        },
-        ReturnValues: "ALL_NEW" as const,
-      };
-
-      console.log("UPDATING CONVERSATION:", conversationId, conversationData);
-      await dynamoDBClient.send(new UpdateItemCommand(params));
-    }
-  } catch (error: any) {
-    throw new Error("Error saving conversation:", error);
+    await dynamoDBClient.send(new PutItemCommand(params));
+    return conversationId;
+  } catch (error) {
+    console.error("Error saving conversation:", error);
+    throw new Error("Failed to save conversation");
   }
 };
 
 export const getConversation = async (
-  conversationId
+  conversationId: string
 ): Promise<Conversation | undefined> => {
+  console.log("conversationId", conversationId);
   const params = {
     TableName: "conversations",
     Key: {
-      conversationId: { S: String(conversationId) },
+      conversationId: { S: conversationId },
     },
   };
 
@@ -106,12 +83,10 @@ export const getConversation = async (
     const data: GetItemCommandOutput = await dynamoDBClient.send(
       new GetItemCommand(params)
     );
+    console.log("data", data);
     if (data.Item) {
-      if (process.env.USE_COMPRESSION === "1") {
-        return (await decompressData(data.Item.conversation.S)) as Conversation;
-      } else {
-        return JSON.parse(data.Item.conversation.S!);
-      }
+      const conversation = unmarshall(data.Item) as Conversation;
+      return conversation;
     }
   } catch (error: unknown) {
     if (error instanceof Error && error.name === "ResourceNotFoundException") {
@@ -123,69 +98,92 @@ export const getConversation = async (
   }
 };
 
-export const conversation = async (req, res): Promise<Conversation | void> => {
-  const { prompt, provider, conversationId } = req.body;
-  const apiKey =
-    provider === "openai"
-      ? process.env.OPENAI_API_KEY
-      : process.env.ANTHROPIC_API_KEY;
-  const bot = new Bot(provider, apiKey!);
+export const appendMessage = async (
+  conversationId: string,
+  message: Message
+) => {
+  const params = {
+    TableName: "conversations",
+    Key: {
+      conversationId: { S: String(conversationId) },
+    },
+    UpdateExpression: "SET messages = list_append(messages, :message)",
+    ExpressionAttributeValues: marshall({
+      ":message": [message],
+    }),
+    ReturnValues: "ALL_NEW" as const,
+  };
 
   try {
-    let _conversation: Partial<Conversation> = {
-      name: "",
-      tags: [],
-      messages: [{ role: "user", content: prompt }],
-      summary: "", // Add summary property
-    };
-    let savedConversation: Conversation | null = null;
-
-    if (conversationId) {
-      savedConversation = await getConversation(conversationId);
-      if (savedConversation) {
-        // Append context to the conversation
-        _conversation.summary = savedConversation.summary;
-      }
-      console.log("continuing conversation:", _conversation);
-    } else {
-      console.log("starting new conversation");
-    }
-
-    // AI response to the user message
-    const aiResponseMessage = await bot.send(_conversation);
-
-    if (savedConversation) {
-      // Keep history of messages
-      _conversation.messages = [
-        ...savedConversation.messages,
-        ..._conversation.messages,
-      ];
-    }
-    // Append bot response to the conversation messages
-    _conversation.messages.push(aiResponseMessage);
-    const savedConversationId = await saveConversation(_conversation);
-    _conversation.id = savedConversationId;
-
-    res.status(200).json({ conversation: _conversation });
+    const result = await dynamoDBClient.send(new UpdateItemCommand(params));
+    return unmarshall(result.Attributes) as Conversation;
   } catch (error) {
-    console.error("Error processing conversation:", error);
-    res.status(500).send("Failed to process conversation");
+    console.error("Error appending message:", error);
+    throw new Error("Failed to append message");
   }
 };
 
-export const getConversationById = async (req, res) => {
-  const { id } = req.query;
+export const updateTags = async (req, res) => {
+  const { conversationId, tags } = req.body;
 
   try {
-    const conversation = await getConversation(id);
-    if (conversation) {
-      res.status(200).json(conversation);
-    } else {
-      res.status(404).json({ message: "Conversation not found" });
+    const conversation = await getConversation(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ message: "Conversation not found" });
     }
+
+    const params = {
+      TableName: "conversations",
+      Key: {
+        conversationId: { S: conversationId },
+      },
+      UpdateExpression: "SET tags = :tags",
+      ExpressionAttributeValues: marshall({
+        ":tags": tags,
+      }),
+      ReturnValues: "ALL_NEW",
+    };
+
+    const result = await dynamoDBClient.send(new UpdateItemCommand(params));
+    const updatedConversation = unmarshall(result.Attributes) as Conversation;
+
+    res.status(200).json({ message: "Tags updated successfully", updatedConversation });
   } catch (error) {
-    console.error("Error getting conversation:", error);
-    res.status(500).json({ message: "Failed to get conversation" });
+    console.error("Error updating tags:", error);
+    res.status(500).json({ message: "Failed to update tags" });
+  }
+};
+
+export const deleteTag = async (req, res) => {
+  const { conversationId, tag } = req.body;
+
+  try {
+    const conversation = await getConversation(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ message: "Conversation not found" });
+    }
+
+    const updatedTags = conversation.tags.filter(t => t !== tag);
+
+    const params = {
+      TableName: "conversations",
+      Key: {
+        conversationId: { S: conversationId },
+      },
+      UpdateExpression: "SET tags = :tags",
+      ExpressionAttributeValues: marshall({
+        ":tags": updatedTags,
+      }),
+      ReturnValues: "ALL_NEW",
+    };
+
+    const result = await dynamoDBClient.send(new UpdateItemCommand(params));
+    const updatedConversation = unmarshall(result.Attributes) as Conversation;
+
+    res.status(200).json({ message: "Tag deleted successfully", updatedConversation });
+  } catch (error) {
+    console.error("Error deleting tag:", error);
+    res.status(500).json({ message: "Failed to delete tag" });
   }
 };
 
@@ -204,10 +202,7 @@ export const getConversations = async (req, res) => {
     );
     let conversations = [];
     if (data.Items?.length > 0) {
-      conversations = data.Items.map((c) => ({
-        ...JSON.parse(c.conversation.S),
-        id: c.conversationId.S,
-      }));
+      conversations = data.Items.map((c) => unmarshall(c));
     }
 
     res.status(200).json({ conversations });
@@ -219,22 +214,29 @@ export const getConversations = async (req, res) => {
 
 export const addTag = async (req, res) => {
   const { conversationId, tag } = req.body;
-
-  console.log("conversationId", conversationId);
-  console.log("tag", tag);
+  console.log("🚀 ~ addTag ~ { conversationId, tag }:", conversationId, tag )
 
   try {
-    const conversation = await getConversation(conversationId);
-    if (!conversation) {
-      return res.status(404).json({ message: "Conversation not found" });
-    }
+    const params = {
+      TableName: "conversations",
+      Key: {
+        conversationId: { S: conversationId.toString() },
+      },
+      // This will prevent DynamoDB from creating a new item if one doesn’t already exist with the provided id.
+      // ConditionExpression: "attribute_exists(conversationId)",
+      UpdateExpression: "SET tags = list_append(if_not_exists(tags, :empty_list), :new_tag)",
+      ExpressionAttributeValues: {
+        ":new_tag": { L: [{ S: tag }] },
+        ":empty_list": { L: [] },
+      },
+      ReturnValues: "ALL_NEW",
+    };
+    console.log("🚀 ~ addTag ~ params:", params)
 
-    if (!conversation.tags.includes(tag)) {
-      conversation.tags.push(tag);
-    }
-    await saveConversation(conversation, conversationId);
+    const result = await dynamoDBClient.send(new UpdateItemCommand(params));
+    const updatedConversation = unmarshall(result.Attributes) as Conversation;
 
-    res.status(200).send("ok");
+    res.status(200).json({ message: "Tag added successfully", conversationId, updatedConversation });
   } catch (error) {
     console.error("Error adding tag:", error);
     res.status(500).json({ message: "Failed to add tag" });
@@ -243,48 +245,104 @@ export const addTag = async (req, res) => {
 
 export const editTag = async (req, res) => {
   const { conversationId, oldTag, newTag } = req.body;
+  console.log("🚀 ~ editTag ~ { conversationId, oldTag, newTag }:", conversationId, oldTag, newTag);
 
   try {
     const conversation = await getConversation(conversationId);
+    console.log("🚀 ~ editTag ~ conversation:", conversation)
     if (!conversation) {
       return res.status(404).json({ message: "Conversation not found" });
     }
-    console.log("req.body", req.body);
-    console.log("conversation", conversation);
 
-    const tagIndex = conversation.tags.indexOf(oldTag);
-    if (tagIndex !== -1) {
-      conversation.tags[tagIndex] = newTag;
-    } else {
-      return res.status(404).json({ message: "Tag not found" });
+    // Update the tags array
+    const updatedTags = conversation.tags.map((t) => (t === oldTag ? newTag : t));
+    console.log("🚀 ~ editTag ~ updatedTags", updatedTags);
+
+    const params = {
+      TableName: "conversations",
+      Key: marshall({
+        conversationId: conversationId,
+      }),
+      UpdateExpression: "SET tags = :tags",
+      ExpressionAttributeValues: marshall({
+        ":tags": updatedTags,
+      }),
+      ReturnValues: "ALL_NEW",
+    };
+
+    console.log("🚀 ~ editTag ~ params:", JSON.stringify(params, null, 2));
+
+    const result = await dynamoDBClient.send(new UpdateItemCommand(params));
+    const updatedConversation = unmarshall(result.Attributes);
+
+    // If tags is a Set, convert it to an array for serialization
+    if (updatedConversation.tags instanceof Set) {
+      updatedConversation.tags = Array.from(updatedConversation.tags);
     }
-    await saveConversation(conversation, conversationId);
 
-    res.status(200).send("ok");
+    res.status(200).json({ message: "Tag edited successfully", updatedConversation });
   } catch (error) {
-    console.error("Error updating tag:", error);
-    res.status(500).json({ message: "Failed to update tag" });
+    console.error("Error editing tag:", error);
+    res.status(500).json({ message: "Failed to edit tag" });
   }
 };
 
-export const removeTag = async (req, res) => {
-  const { conversationId, tag } = req.body;
+
+export const getConversationById = async (req, res) => {
+  const { id } = req.query; // Extract id from query parameters
 
   try {
-    const conversation = await getConversation(conversationId);
-    if (!conversation) {
-      return res.status(404).json({ message: "Conversation not found" });
+    const conversation = await getConversation(id as string);
+    if (conversation) {
+      res.status(200).json(conversation);
+    } else {
+      res.status(404).json({ message: "Conversation not found" });
     }
-    console.log("conversation", conversation);
-    console.log("conversation.tags", conversation.tags);
-
-    conversation.tags = conversation.tags.filter((t) => t !== tag);
-    console.log("conversation without tag", conversation);
-    await saveConversation(conversation, conversationId);
-
-    res.status(200).send("ok");
   } catch (error) {
-    console.error("Error removing tag:", error);
-    res.status(500).json({ message: "Failed to remove tag" });
+    console.error("Error getting conversation:", error);
+    res.status(500).json({ message: "Failed to get conversation" });
+  }
+};
+
+export const conversation = async (req, res) => {
+  const { conversationId, conversation, provider } = req.body;
+  const apiKey =
+    provider === "openai"
+      ? process.env.OPENAI_API_KEY
+      : process.env.ANTHROPIC_API_KEY;
+  const bot = new Bot(provider, apiKey!);
+
+  try {
+    if (conversationId) {
+      // Update existing conversation
+      const existingConversation = await getConversation(conversationId);
+      if (!existingConversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      // Append message to the conversation using appendMEssage function
+      await appendMessage(String(conversationId), conversation.messages[0]);
+      res.status(200).json("message added to conversation");
+    } else {
+      // Provide an empty conversation if no conversationId is given
+      const newConversation = {
+        id: Date.now().toString(),
+        name: "",
+        tags: [],
+        messages: [{ role: "user", content: prompt }],
+        summary: "",
+      };
+
+      // push the AI response message to the conversation
+      const response = await bot.send(newConversation);
+      newConversation.messages.push(response);
+
+
+      const newConversationId = await saveConversation(newConversation);
+      res.status(201).json({ message: "New empty conversation provided", conversationId: newConversationId, conversation: newConversation });
+    }
+  } catch (error) {
+    console.error("Error saving conversation:", error);
+    res.status(500).json({ message: "Failed to save conversation" });
   }
 };

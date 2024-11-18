@@ -1,10 +1,9 @@
-import express from 'express';
-import compression from 'compression';
 import dotenv from 'dotenv';
+import express from 'express';
+import { addTag, conversation, deleteTag, editTag, getConversationById, getConversations } from './api/conversation';
 import { fetchQuote } from './api/fetchQuote';
-import corsMiddleware from './middleware/cors';
 import { sendPrompt } from './api/sendPrompt';
-import { conversation, getConversationById, getConversations, addTag, editTag, removeTag } from './api/conversation';
+import corsMiddleware from './middleware/cors';
 
 dotenv.config();
 
@@ -18,12 +17,12 @@ app.use(express.json());
 
 // Total recall API
 app.get('/conversation', getConversationById);
-app.post('/conversation', conversation);
 app.get('/conversations', getConversations); // Add this line to define the GET /conversations endpoint
+app.post('/conversation', conversation);
 
 app.post('/tag', addTag); // add tag
 app.put('/tag', editTag); // edit tag
-app.delete('/tag', removeTag);
+app.delete('/tag', deleteTag);
 
 // Dream catcher API
 app.post('/sendPrompt', sendPrompt);
