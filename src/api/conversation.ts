@@ -7,6 +7,7 @@ import {
   ScanCommand,
   ScanCommandOutput,
 } from "@aws-sdk/client-dynamodb";
+import { v4 as uuidv4 } from 'uuid';
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import dotenv from "dotenv";
 import { compressData, decompressData } from "../utils";
@@ -41,7 +42,7 @@ export const saveConversation = async (
   conversation: Conversation,
 ) => {
   console.log("about to save conversation", conversation);
-  const conversationId = Date.now().toString();
+  const conversationId = uuidv4();
   // if (!conversation.name) {
   //   // Generate a name for the conversation using the first 5 words of the prompt
   //   const firstMessage = conversation.messages[0]?.content || "";
@@ -203,6 +204,8 @@ export const getConversations = async (req, res) => {
     let conversations = [];
     if (data.Items?.length > 0) {
       conversations = data.Items.map((c) => unmarshall(c));
+      // parse conversation in conversations to return according to the interface
+
     }
 
     res.status(200).json({ conversations });
@@ -289,10 +292,14 @@ export const editTag = async (req, res) => {
 
 
 export const getConversationById = async (req, res) => {
-  const { id } = req.query; // Extract id from query parameters
+  const { conversationId } = req.query; // Extract id from query parameters
 
   try {
-    const conversation = await getConversation(id as string);
+    console.log("🚀 ~ getConversationById ~ conversationId", conversationId)
+    if(!conversationId) {
+      return res.status(400).json({ message: "conversationId is required" });
+    }
+    const conversation = await getConversation(conversationId as string);
     if (conversation) {
       res.status(200).json(conversation);
     } else {
@@ -305,7 +312,7 @@ export const getConversationById = async (req, res) => {
 };
 
 export const conversation = async (req, res) => {
-  const { conversationId, conversation, provider } = req.body;
+  const { prompt, provider } = req.body;
   const apiKey =
     provider === "openai"
       ? process.env.OPENAI_API_KEY
@@ -313,20 +320,9 @@ export const conversation = async (req, res) => {
   const bot = new Bot(provider, apiKey!);
 
   try {
-    if (conversationId) {
-      // Update existing conversation
-      const existingConversation = await getConversation(conversationId);
-      if (!existingConversation) {
-        return res.status(404).json({ message: "Conversation not found" });
-      }
 
-      // Append message to the conversation using appendMEssage function
-      await appendMessage(String(conversationId), conversation.messages[0]);
-      res.status(200).json("message added to conversation");
-    } else {
       // Provide an empty conversation if no conversationId is given
       const newConversation = {
-        id: Date.now().toString(),
         name: "",
         tags: [],
         messages: [{ role: "user", content: prompt }],
@@ -340,7 +336,6 @@ export const conversation = async (req, res) => {
 
       const newConversationId = await saveConversation(newConversation);
       res.status(201).json({ message: "New empty conversation provided", conversationId: newConversationId, conversation: newConversation });
-    }
   } catch (error) {
     console.error("Error saving conversation:", error);
     res.status(500).json({ message: "Failed to save conversation" });

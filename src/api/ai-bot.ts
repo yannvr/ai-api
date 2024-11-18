@@ -29,14 +29,14 @@ class Bot {
   public async send(conversation: Conversation): Promise<Message> {
 
     if (this.provider === "openai") {
-      if (conversation.messages.length > 0) {
-        conversation.summary = await this.summarize(conversation);
-      }
+      // if (conversation.messages.length > 0) {
+      //   conversation.summary = await this.summarize(conversation);
+      // }
       return this.sendToChatGPT(conversation);
     } else if (this.provider === "anthropic") {
-      if (conversation.messages.length > 0) {
-        conversation.summary = await this.summarize(conversation);
-      }
+      // if (conversation.messages.length > 0) {
+      //   conversation.summary = await this.summarize(conversation);
+      // }
       return this.sendToAnthropic(conversation);
     } else {
       throw new Error("Invalid provider");
