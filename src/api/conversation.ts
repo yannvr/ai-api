@@ -208,7 +208,7 @@ export const getConversations = async (req, res) => {
 
     }
 
-    res.status(200).json({ conversations });
+    res.status(200).json(conversations)
   } catch (error) {
     console.error("Error getting conversations:", error);
     res.status(500).json({ message: "Failed to get conversations" });
