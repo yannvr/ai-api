@@ -1,18 +1,15 @@
 import {
-  DynamoDBClient,
   GetItemCommand,
   GetItemCommandOutput,
   PutItemCommand,
-  UpdateItemCommand,
   ScanCommand,
   ScanCommandOutput,
+  UpdateItemCommand
 } from "@aws-sdk/client-dynamodb";
-import { v4 as uuidv4 } from 'uuid';
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import dotenv from "dotenv";
-import { compressData, decompressData } from "../utils";
+import { v4 as uuidv4 } from 'uuid';
 import { Bot, Conversation, Message } from "./ai-bot";
-import _ from "lodash";
 import { dynamoDBClient } from "./dynamoDBClient";
 
 // Load environment variables
