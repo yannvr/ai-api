@@ -3,7 +3,7 @@ const corsMiddleware = (req, res, next) => {
   const specialHeader = req.headers['x-api-key'];
 
   // Allow CORS for specific origins
-  const allowedOrigins = ['https://dreamcatcher.run', 'http://localhost:9000', '*'];
+  const allowedOrigins = ['https://dreamcatcher.run', 'http://localhost:9000', 'http://localhost:9300', '*'];
   const origin = req.headers.origin;
 
   if (allowedOrigins.includes(origin)) {
