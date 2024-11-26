@@ -205,7 +205,7 @@ export const conversation = async (req, res) => {
 
 
       const newConversationId = await saveConversation(newConversation);
-      res.status(201).json({ message: "New empty conversation provided", conversationId: newConversationId, conversation: newConversation });
+      res.status(201).json({ conversationId: newConversationId, ...newConversation });
   } catch (error) {
     console.error("Error saving conversation:", error);
     res.status(500).json({ message: "Failed to save conversation" });
