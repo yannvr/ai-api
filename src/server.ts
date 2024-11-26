@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import express from 'express';
 import { addTag, deleteTag, editTag } from './api/tags';
-import { conversation, getConversationById, getConversations } from './api/conversation';
+import { conversation as createConversation, getConversationById, getConversations } from './api/conversation';
 import { fetchQuote } from './api/fetchQuote';
 import { sendPrompt } from './api/sendPrompt';
 import { updateConversationName } from './api/name';
@@ -15,19 +15,19 @@ const app = express();
 app.use(corsMiddleware);
 app.use(express.json());
 
-app.get('/conversation', getConversationById);
 app.get('/conversations', getConversations);
-app.post('/conversation', conversation);
 
+app.get('/conversation', getConversationById);
+app.post('/conversation', createConversation);
 app.post('/conversation/tag', addTag);
 app.put('/conversation/tag', editTag);
 app.delete('/conversation/tag', deleteTag);
+app.post('/conversation/message', addMessage);
 
 app.post('/sendPrompt', sendPrompt);
 app.get('/fetchQuote', fetchQuote);
 
 app.put('/conversation/name', updateConversationName);
-app.post('/conversation/message', addMessage);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
