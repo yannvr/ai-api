@@ -22,7 +22,7 @@ app.post('/conversation', createConversation);
 app.post('/conversation/tag', addTag);
 app.put('/conversation/tag', editTag);
 app.delete('/conversation/tag', deleteTag);
-app.post('/conversation/message', addMessage);
+// app.post('/conversation/message', addMessage);
 
 app.post('/sendPrompt', sendPrompt);
 app.get('/fetchQuote', fetchQuote);

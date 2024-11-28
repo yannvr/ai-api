@@ -4,20 +4,18 @@ import {
   PutItemCommand,
   ScanCommand,
   ScanCommandOutput,
-  UpdateItemCommand
+  UpdateItemCommand,
 } from "@aws-sdk/client-dynamodb";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import dotenv from "dotenv";
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from "uuid";
 import { Bot, Conversation, Message } from "./ai-bot";
 import { dynamoDBClient } from "./dynamoDBClient";
 
 // Load environment variables
 dotenv.config();
 
-export const saveConversation = async (
-  conversation: Conversation,
-) => {
+export const saveConversation = async (conversation: Conversation) => {
   console.log("about to save conversation", conversation);
   const conversationId = uuidv4();
   // if (!conversation.name) {
@@ -125,13 +123,14 @@ export const updateTags = async (req, res) => {
     const result = await dynamoDBClient.send(new UpdateItemCommand(params));
     const updatedConversation = unmarshall(result.Attributes) as Conversation;
 
-    res.status(200).json({ message: "Tags updated successfully", updatedConversation });
+    res
+      .status(200)
+      .json({ message: "Tags updated successfully", updatedConversation });
   } catch (error) {
     console.error("Error updating tags:", error);
     res.status(500).json({ message: "Failed to update tags" });
   }
 };
-
 
 export const getConversations = async (req, res) => {
   const { limit = 10 } = req.query;
@@ -150,23 +149,21 @@ export const getConversations = async (req, res) => {
     if (data.Items?.length > 0) {
       conversations = data.Items.map((c) => unmarshall(c));
       // parse conversation in conversations to return according to the interface
-
     }
 
-    res.status(200).json(conversations)
+    res.status(200).json(conversations);
   } catch (error) {
     console.error("Error getting conversations:", error);
     res.status(500).json({ message: "Failed to get conversations" });
   }
 };
 
-
 export const getConversationById = async (req, res) => {
   const { conversationId } = req.query; // Extract id from query parameters
 
   try {
-    console.log("🚀 ~ getConversationById ~ conversationId", conversationId)
-    if(!conversationId) {
+    console.log("🚀 ~ getConversationById ~ conversationId", conversationId);
+    if (!conversationId) {
       return res.status(400).json({ message: "conversationId is required" });
     }
     const conversation = await getConversation(conversationId as string);
@@ -182,17 +179,17 @@ export const getConversationById = async (req, res) => {
 };
 
 export const conversation = async (req, res) => {
-  const { prompt, provider } = req.body;
+  const { prompt, provider, conversationId, model } = req.body;
   const apiKey =
     provider === "openai"
       ? process.env.OPENAI_API_KEY
       : process.env.ANTHROPIC_API_KEY;
   const bot = new Bot(provider, apiKey!);
 
-  try {
-
+  if (!conversationId) {
+    try {
       // Provide an empty conversation if no conversationId is given
-      const newConversation = {
+      const newConversation: Conversation = {
         name: "",
         tags: [],
         messages: [{ role: "user", content: prompt }],
@@ -203,11 +200,34 @@ export const conversation = async (req, res) => {
       const response = await bot.send(newConversation);
       newConversation.messages.push(response);
 
-
       const newConversationId = await saveConversation(newConversation);
-      res.status(201).json({ conversationId: newConversationId, ...newConversation });
-  } catch (error) {
-    console.error("Error saving conversation:", error);
-    res.status(500).json({ message: "Failed to save conversation" });
+      res
+        .status(201)
+        .json({ conversationId: newConversationId, ...newConversation });
+    } catch (error) {
+      console.error("Error saving conversation:", error);
+      res.status(500).json({ message: "Failed to save conversation" });
+    }
+  } else {
+    try {
+      console.log('continuing conversation:', conversationId);
+      const conversation = await getConversation(conversationId);
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      // push the user message to the conversation
+      conversation.messages.push({ role: "user", content: prompt });
+      // push the AI response message to the conversation
+      console.log('conversation:', conversation);
+      const response = await bot.send(conversation);
+      console.log('response:', response);
+      const updatedConversation = await appendMessage(conversationId, response);
+
+      res.status(200).json(updatedConversation);
+    } catch (error) {
+      console.error("Error sending message:", error);
+      res.status(500).json({ message: "Failed to send message" });
+    }
   }
 };
