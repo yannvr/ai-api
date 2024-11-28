@@ -1,4 +1,4 @@
-import { UpdateItemCommand } from "@aws-sdk/client-dynamodb";
+import { UpdateItemCommand, ReturnValue } from "@aws-sdk/client-dynamodb";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import { getConversation } from "./conversation";
 import { Conversation, Message } from "./ai-bot";
@@ -23,11 +23,11 @@ export const addMessage = async (req, res) => {
       ExpressionAttributeValues: marshall({
         ":message": [message],
       }),
-      ReturnValues: "ALL_NEW",
+      ReturnValues: ReturnValue.ALL_NEW,
     };
 
     const result = await dynamoDBClient.send(new UpdateItemCommand(params));
-    const updatedConversation = unmarshall(result.Attributes) as Conversation;
+    const updatedConversation = result.Attributes ? unmarshall(result.Attributes) as Conversation : null;
 
     res.status(200).json({ message: "Message added successfully", updatedConversation });
   } catch (error) {
