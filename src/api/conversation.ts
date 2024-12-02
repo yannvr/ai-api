@@ -1,4 +1,5 @@
 import {
+  DeleteItemCommand,
   GetItemCommand,
   GetItemCommandOutput,
   PutItemCommand,
@@ -11,6 +12,7 @@ import dotenv from "dotenv";
 import { v4 as uuidv4 } from "uuid";
 import { Bot, Conversation, Message } from "./ai-bot";
 import { dynamoDBClient } from "./dynamoDBClient";
+import { ContentBlock } from "@anthropic-ai/sdk/resources";
 
 // Load environment variables
 dotenv.config();
@@ -33,7 +35,7 @@ export const saveConversation = async (conversation: Conversation) => {
     }),
   };
 
-  console.log("SAVING CONVERSATION:", conversation);
+  console.log("SAVING CONVERSATION:", conversationId);
 
   try {
     await dynamoDBClient.send(new PutItemCommand(params));
@@ -47,7 +49,6 @@ export const saveConversation = async (conversation: Conversation) => {
 export const getConversation = async (
   conversationId: string
 ): Promise<Conversation | undefined> => {
-  // console.log("conversationId", conversationId);
   const params = {
     TableName: "conversations",
     Key: {
@@ -192,13 +193,16 @@ export const conversation = async (req, res) => {
       const newConversation: Conversation = {
         name: "",
         tags: [],
-        messages: [{ role: "user", content: prompt }],
+        messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
         summary: "",
       };
 
+      console.log('new conversation:', newConversation);
       // push the AI response message to the conversation
       const response = await bot.send(newConversation);
       newConversation.messages.push(response);
+      console.log('new conversation with response:', newConversation);
+
 
       const newConversationId = await saveConversation(newConversation);
       res
@@ -216,18 +220,39 @@ export const conversation = async (req, res) => {
         return res.status(404).json({ message: "Conversation not found" });
       }
 
-      // push the user message to the conversation
-      conversation.messages.push({ role: "user", content: prompt });
-      // push the AI response message to the conversation
-      console.log('conversation:', conversation);
-      const response = await bot.send(conversation);
-      console.log('response:', response);
-      const updatedConversation = await appendMessage(conversationId, response);
+    // push the user message to the conversation
+    conversation.messages.push({ role: "user", content: [{ type: "text", text: prompt }] });
+    // push the AI response message to the conversation
+    console.log('conversation:', conversation);
+    const response = await bot.send(conversation);
+    // console.log('response:', response);
+    conversation.messages.push(response);
 
-      res.status(200).json(updatedConversation);
+    const updatedConversationId = await saveConversation(conversation);
+    res.status(200).json({ conversationId: updatedConversationId, ...conversation });
     } catch (error) {
       console.error("Error sending message:", error);
       res.status(500).json({ message: "Failed to send message" });
     }
+  }
+};
+
+
+export const deleteConversation = async (req, res) => {
+  const { conversationId } = req.body;
+
+  try {
+    const params = {
+      TableName: "conversations",
+      Key: {
+        conversationId: { S: conversationId },
+      },
+    };
+
+    await dynamoDBClient.send(new DeleteItemCommand(params));
+    res.status(200).json({ message: "Conversation deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting conversation:", error);
+    res.status(500).json({ message: "Failed to delete conversation" });
   }
 };

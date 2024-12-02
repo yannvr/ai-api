@@ -1,11 +1,10 @@
 import dotenv from 'dotenv';
 import express from 'express';
 import { addTag, deleteTag, editTag } from './api/tags';
-import { conversation as createConversation, getConversationById, getConversations } from './api/conversation';
+import { conversation as createConversation, getConversationById, getConversations, deleteConversation } from './api/conversation';
 import { fetchQuote } from './api/fetchQuote';
 import { sendPrompt } from './api/sendPrompt';
 import { updateConversationName } from './api/name';
-import { addMessage } from './api/messages';
 import corsMiddleware from './middleware/cors';
 
 dotenv.config();
@@ -24,6 +23,7 @@ app.put('/conversation/tag', editTag);
 app.delete('/conversation/tag', deleteTag);
 // app.post('/conversation/message', addMessage);
 
+app.delete('/conversation', deleteConversation);
 app.post('/sendPrompt', sendPrompt);
 app.get('/fetchQuote', fetchQuote);
 

@@ -2,7 +2,7 @@
 
 import axios from 'axios';
 import { Anthropic } from '@anthropic-ai/sdk';
-import { MessageParam, Message as AnthropicMessage, ContentBlock } from '@anthropic-ai/sdk/resources';
+import { MessageParam, Message as AnthropicMessage, ContentBlock, ImageBlockParam, TextBlockParam, ToolResultBlockParam, ToolUseBlockParam } from '@anthropic-ai/sdk/resources';
 
 export type Role = 'user' | 'assistant';
 
@@ -39,6 +39,11 @@ export class Bot {
     const anthropic = new Anthropic({ apiKey: this.apiKey });
     // const prompt = this.constructAnthropicPrompt(messages);
 
+    const anthropicMessages: MessageParam[] = messages.map((msg) => ({
+      role: msg.role,
+      content: msg.content as string | (TextBlockParam | ImageBlockParam | ToolUseBlockParam | ToolResultBlockParam)[],
+    }));
+
     const response: AnthropicMessage = await anthropic.messages.create({
       // https://docs.anthropic.com/en/docs/about-claude/models
       // model: 'claude-3-5-opus-latest',
@@ -46,7 +51,7 @@ export class Bot {
       // model: 'claude-3-5-haiku-latest',
       // Test legacy models
       model: 'claude-2.0', // cheapest model
-      messages,
+      messages: anthropicMessages,
       max_tokens: 1024,
     });
 
