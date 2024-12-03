@@ -8,7 +8,7 @@ export type Role = 'user' | 'assistant';
 
 export interface Message {
   role: Role;
-  content: ContentBlock[];
+  content: ContentBlock;
 }
 
 export interface Conversation {
@@ -41,8 +41,11 @@ export class Bot {
 
     const anthropicMessages: MessageParam[] = messages.map((msg) => ({
       role: msg.role,
-      content: msg.content as string | (TextBlockParam | ImageBlockParam | ToolUseBlockParam | ToolResultBlockParam)[],
+      content: Array.isArray(msg.content) ? msg.content : [msg.content] as (TextBlockParam | ImageBlockParam | ToolUseBlockParam | ToolResultBlockParam)[],
     }));
+    console.log("🚀 ~ Bot ~ constanthropicMessages:MessageParam[]=messages.map ~ anthropicMessages:", anthropicMessages)
+
+
 
     const response: AnthropicMessage = await anthropic.messages.create({
       // https://docs.anthropic.com/en/docs/about-claude/models
@@ -59,7 +62,7 @@ export class Bot {
 
     return {
       role: 'assistant',
-      content: response.content,
+      content: response.content[0],
     };
   }
 

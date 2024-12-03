@@ -193,11 +193,10 @@ export const conversation = async (req, res) => {
       const newConversation: Conversation = {
         name: "",
         tags: [],
-        messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+        messages: [{ role: "user", content: { type: "text", text: prompt } }],
         summary: "",
       };
 
-      console.log('new conversation:', newConversation);
       // push the AI response message to the conversation
       const response = await bot.send(newConversation);
       newConversation.messages.push(response);
@@ -221,7 +220,7 @@ export const conversation = async (req, res) => {
       }
 
     // push the user message to the conversation
-    conversation.messages.push({ role: "user", content: [{ type: "text", text: prompt }] });
+    conversation.messages.push({ role: "user", content: { type: "text", text: prompt } });
     // push the AI response message to the conversation
     console.log('conversation:', conversation);
     const response = await bot.send(conversation);
