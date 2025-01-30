@@ -1,34 +1,35 @@
-// /* eslint-disable no-undef */
-import axios from 'axios'
-import { Anthropic } from '@anthropic-ai/sdk'
+import { Request, Response, NextFunction } from 'express';
+import axios from 'axios';
+import { Anthropic } from '@anthropic-ai/sdk';
 
-export const sendPrompt = async (req, res, next) => {
-  // console.log('req', req)
-  const { prompt, provider } = req.body
-  console.log('req.body', req.body)
-  const apiKeyOpenAI = process.env.OPENAI_API_KEY
-  const apiKeyAnthropic = process.env.ANTHROPIC_API_KEY
+export const sendPrompt = async (req: Request, res: Response, next: NextFunction) => {
+  const { prompt, provider } = req.body;
+  const apiKeyOpenAI = process.env.OPENAI_API_KEY;
+  const apiKeyAnthropic = process.env.ANTHROPIC_API_KEY;
 
   try {
     let response;
     if (provider === 'openai') {
+      if (!apiKeyOpenAI) {
+        return next({ statusCode: 500, statusMessage: 'OpenAI API key is missing' });
+      }
       response = await sendToChatGPT(prompt, apiKeyOpenAI);
     } else if (provider === 'anthropic') {
+      if (!apiKeyAnthropic) {
+        return next({ statusCode: 500, statusMessage: 'Anthropic API key is missing' });
+      }
       response = await sendToAnthropic(prompt, apiKeyAnthropic);
     } else {
       return next({ statusCode: 400, statusMessage: 'Invalid provider' });
     }
-    console.log('response', response);
     res.status(200).json(response);
   } catch (error) {
-    console.log('Error sending prompt:', error);
     res.status(500).send(error);
   }
 }
 
-const sendToChatGPT = async (prompt, apiKey) => {
-  const apiUrl = 'https://api.openai.com/v1/chat/completions'
-  console.log('apiUrl', apiUrl)
+const sendToChatGPT = async (prompt: string, apiKey: string) => {
+  const apiUrl = 'https://api.openai.com/v1/chat/completions';
   const response = await axios.post(
     apiUrl,
     {
@@ -41,28 +42,23 @@ const sendToChatGPT = async (prompt, apiKey) => {
         'Content-Type': 'application/json',
       },
     },
-  )
+  );
 
-  console.log('response', response)
+  console.log('response', response);
 
-  return response.data.choices[0].message.content
+  return response.data.choices[0].message.content;
 }
 
-const sendToAnthropic = async (prompt, apiKey) => {
+const sendToAnthropic = async (prompt: string, apiKey: string) => {
   const anthropic = new Anthropic({
     apiKey: apiKey,
-  })
-
-  console.log('prompt', prompt)
-  console.log('apiKey', apiKey)
+  });
 
   const response: any = await anthropic.messages.create({
     model: 'claude-3-5-sonnet-20240620',
     max_tokens: 1024,
     messages: [{ role: 'user', content: prompt }],
-  })
+  });
 
-  console.log('response', response)
-
-  return response.content[0].text
+  return response.content[0].text;
 }

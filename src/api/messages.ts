@@ -1,10 +1,11 @@
-import { UpdateItemCommand, ReturnValue } from "@aws-sdk/client-dynamodb";
+import { ReturnValue, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
+import { Request, Response } from 'express';
+import { Conversation } from "./ai-bot";
 import { getConversation } from "./conversation";
-import { Conversation, Message } from "./ai-bot";
 import { dynamoDBClient } from "./dynamoDBClient";
 
-export const addMessage = async (req, res) => {
+export const addMessage = async (req: Request, res: Response) => {
   const { conversationId, message } = req.body;
   console.log("🚀 ~ addMessage ~ { conversationId, message }:", { conversationId, message });
 

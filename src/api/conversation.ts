@@ -1,8 +1,10 @@
+import { Request, Response } from 'express';
 import {
   DeleteItemCommand,
   GetItemCommand,
   GetItemCommandOutput,
   PutItemCommand,
+  ReturnValue,
   ScanCommand,
   ScanCommandOutput,
   UpdateItemCommand,
@@ -17,15 +19,8 @@ import { ContentBlock } from "@anthropic-ai/sdk/resources";
 // Load environment variables
 dotenv.config();
 
-export const saveConversation = async (conversation: Conversation) => {
-  console.log("about to save conversation", conversation);
+export const saveConversation = async (conversation: Conversation): Promise<string> => {
   const conversationId = uuidv4();
-  // if (!conversation.name) {
-  //   // Generate a name for the conversation using the first 5 words of the prompt
-  //   const firstMessage = conversation.messages[0]?.content || "";
-  //   const firstFiveWords = firstMessage.split(" ").slice(0, 5).join(" ");
-  //   conversation.name = firstFiveWords || "Untitled Conversation";
-  // }
 
   const params = {
     TableName: "conversations",
@@ -60,7 +55,6 @@ export const getConversation = async (
     const data: GetItemCommandOutput = await dynamoDBClient.send(
       new GetItemCommand(params)
     );
-    // console.log("data", data);
     if (data.Item) {
       const conversation = unmarshall(data.Item) as Conversation;
       return conversation;
@@ -78,7 +72,7 @@ export const getConversation = async (
 export const appendMessage = async (
   conversationId: string,
   message: Message
-) => {
+): Promise<Conversation> => {
   const params = {
     TableName: "conversations",
     Key: {
@@ -88,19 +82,22 @@ export const appendMessage = async (
     ExpressionAttributeValues: marshall({
       ":message": [message],
     }),
-    ReturnValues: "ALL_NEW" as const,
+    ReturnValues: ReturnValue.ALL_NEW,
   };
 
   try {
     const result = await dynamoDBClient.send(new UpdateItemCommand(params));
-    return unmarshall(result.Attributes) as Conversation;
+    if (result.Attributes) {
+      return unmarshall(result.Attributes) as Conversation;
+    }
+    throw new Error("Failed to append message: Attributes are undefined");
   } catch (error) {
     console.error("Error appending message:", error);
     throw new Error("Failed to append message");
   }
 };
 
-export const updateTags = async (req, res) => {
+export const updateTags = async (req: Request, res: Response) => {
   const { conversationId, tags } = req.body;
 
   try {
@@ -118,11 +115,11 @@ export const updateTags = async (req, res) => {
       ExpressionAttributeValues: marshall({
         ":tags": tags,
       }),
-      ReturnValues: "ALL_NEW",
+      ReturnValues: ReturnValue.ALL_NEW,
     };
 
     const result = await dynamoDBClient.send(new UpdateItemCommand(params));
-    const updatedConversation = unmarshall(result.Attributes) as Conversation;
+    const updatedConversation = result.Attributes ? unmarshall(result.Attributes) as Conversation : undefined;
 
     res
       .status(200)
@@ -133,7 +130,7 @@ export const updateTags = async (req, res) => {
   }
 };
 
-export const getConversations = async (req, res) => {
+export const getConversations = async (req: Request, res: Response) => {
   const { limit = 10 } = req.query;
 
   const params = {
@@ -146,10 +143,9 @@ export const getConversations = async (req, res) => {
     const data: ScanCommandOutput = await dynamoDBClient.send(
       new ScanCommand(params)
     );
-    let conversations = [];
-    if (data.Items?.length > 0) {
-      conversations = data.Items.map((c) => unmarshall(c));
-      // parse conversation in conversations to return according to the interface
+    let conversations: Conversation[] = [];
+    if (data.Items && data.Items.length > 0) {
+      conversations = data.Items.map((c) => unmarshall(c) as Conversation) ?? [];
     }
 
     res.status(200).json(conversations);
@@ -159,7 +155,7 @@ export const getConversations = async (req, res) => {
   }
 };
 
-export const getConversationById = async (req, res) => {
+export const getConversationById = async (req: Request, res: Response) => {
   const { conversationId } = req.query; // Extract id from query parameters
 
   try {
@@ -179,7 +175,7 @@ export const getConversationById = async (req, res) => {
   }
 };
 
-export const conversation = async (req, res) => {
+export const conversation = async (req: Request, res: Response) => {
   const { prompt, provider, conversationId, model } = req.body;
   const apiKey =
     provider === "openai"
@@ -202,7 +198,6 @@ export const conversation = async (req, res) => {
       newConversation.messages.push(response);
       console.log('new conversation with response:', newConversation);
 
-
       const newConversationId = await saveConversation(newConversation);
       res
         .status(201)
@@ -219,16 +214,15 @@ export const conversation = async (req, res) => {
         return res.status(404).json({ message: "Conversation not found" });
       }
 
-    // push the user message to the conversation
-    conversation.messages.push({ role: "user", content: { type: "text", text: prompt } });
-    // push the AI response message to the conversation
-    console.log('conversation:', conversation);
-    const response = await bot.send(conversation);
-    // console.log('response:', response);
-    conversation.messages.push(response);
+      // push the user message to the conversation
+      conversation.messages.push({ role: "user", content: { type: "text", text: prompt } });
+      // push the AI response message to the conversation
+      console.log('conversation:', conversation);
+      const response = await bot.send(conversation);
+      conversation.messages.push(response);
 
-    const updatedConversationId = await saveConversation(conversation);
-    res.status(200).json({ conversationId: updatedConversationId, ...conversation });
+      const updatedConversationId = await saveConversation(conversation);
+      res.status(200).json({ conversationId: updatedConversationId, ...conversation });
     } catch (error) {
       console.error("Error sending message:", error);
       res.status(500).json({ message: "Failed to send message" });
@@ -236,8 +230,7 @@ export const conversation = async (req, res) => {
   }
 };
 
-
-export const deleteConversation = async (req, res) => {
+export const deleteConversation = async (req: Request, res: Response) => {
   const { conversationId } = req.body;
 
   try {

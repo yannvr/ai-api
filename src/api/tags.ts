@@ -1,12 +1,12 @@
-import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
+import { Request, Response } from 'express';
+import { DynamoDBClient, UpdateItemCommand, ReturnValue } from "@aws-sdk/client-dynamodb";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import { getConversation } from "./conversation";
 import { Conversation } from "./ai-bot";
 import { dynamoDBClient } from "./dynamoDBClient";
 
-export const addTag = async (req, res) => {
+export const addTag = async (req: Request, res: Response) => {
   const { conversationId, tag } = req.body;
-  console.log("🚀 ~ addTag ~ { conversationId, tag }:", conversationId, tag );
 
   try {
     const params = {
@@ -15,16 +15,14 @@ export const addTag = async (req, res) => {
         conversationId: { S: conversationId.toString() },
       },
       UpdateExpression: "SET tags = list_append(if_not_exists(tags, :empty_list), :new_tag)",
-      ExpressionAttributeValues: {
+      ExpressionAttributeValues: marshall({
         ":new_tag": { L: [{ S: tag }] },
         ":empty_list": { L: [] },
-      },
-      ReturnValues: "ALL_NEW",
+      }),
+      ReturnValues: ReturnValue.ALL_NEW,
     };
-    console.log("🚀 ~ addTag ~ params:", params);
 
     const result = await dynamoDBClient.send(new UpdateItemCommand(params));
-    const updatedConversation = unmarshall(result.Attributes) as Conversation;
 
     res.status(200).json({ message: "Tag added successfully"});
   } catch (error) {
@@ -33,19 +31,16 @@ export const addTag = async (req, res) => {
   }
 };
 
-export const editTag = async (req, res) => {
+export const editTag = async (req: Request, res: Response) => {
   const { conversationId, oldTag, newTag } = req.body;
-  console.log("🚀 ~ editTag ~ { conversationId, oldTag, newTag }:", conversationId, oldTag, newTag);
 
   try {
     const conversation = await getConversation(conversationId);
-    console.log("🚀 ~ editTag ~ conversation:", conversation);
     if (!conversation) {
       return res.status(404).json({ message: "Conversation not found" });
     }
 
     const updatedTags = conversation.tags.map((t) => (t === oldTag ? newTag : t));
-    console.log("🚀 ~ editTag ~ updatedTags", updatedTags);
 
     const params = {
       TableName: "conversations",
@@ -56,13 +51,11 @@ export const editTag = async (req, res) => {
       ExpressionAttributeValues: marshall({
         ":tags": updatedTags,
       }),
-      ReturnValues: "ALL_NEW",
+      ReturnValues: ReturnValue.ALL_NEW,
     };
 
-    console.log("🚀 ~ editTag ~ params:", JSON.stringify(params, null, 2));
-
     const result = await dynamoDBClient.send(new UpdateItemCommand(params));
-    const updatedConversation = unmarshall(result.Attributes);
+    const updatedConversation = result.Attributes ? unmarshall(result.Attributes) : {};
 
     if (updatedConversation.tags instanceof Set) {
       updatedConversation.tags = Array.from(updatedConversation.tags);
@@ -75,7 +68,7 @@ export const editTag = async (req, res) => {
   }
 };
 
-export const deleteTag = async (req, res) => {
+export const deleteTag = async (req: Request, res: Response) => {
   const { conversationId, tag } = req.body;
 
   try {
@@ -95,11 +88,10 @@ export const deleteTag = async (req, res) => {
       ExpressionAttributeValues: marshall({
         ":tags": updatedTags,
       }),
-      ReturnValues: "ALL_NEW",
+      ReturnValues: ReturnValue.ALL_NEW,
     };
 
     const result = await dynamoDBClient.send(new UpdateItemCommand(params));
-    const updatedConversation = unmarshall(result.Attributes) as Conversation;
 
     res.status(200).json({ message: "Tag deleted successfully"});
   } catch (error) {

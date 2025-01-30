@@ -1,12 +1,12 @@
+import { Request, Response } from 'express';
 import { UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import { getConversation } from "./conversation";
 import { Conversation } from "./ai-bot";
 import { dynamoDBClient } from "./dynamoDBClient";
 
-export const updateConversationName = async (req, res) => {
+export const updateConversationName = async (req: Request, res: Response) => {
   const { conversationId, newName: name } = req.body;
-  console.log("🚀 ~ updateConversationName ~ { conversationId, name }:", { conversationId, name: name })
 
   try {
     const conversation = await getConversation(conversationId);
@@ -26,11 +26,11 @@ export const updateConversationName = async (req, res) => {
       ExpressionAttributeValues: marshall({
         ":name": name,
       }),
-      ReturnValues: "ALL_NEW",
+      ReturnValues: "ALL_NEW" as const,
     };
 
     const result = await dynamoDBClient.send(new UpdateItemCommand(params));
-    const updatedConversation = unmarshall(result.Attributes) as Conversation;
+    const updatedConversation = result.Attributes ? unmarshall(result.Attributes) as Conversation : null;
 
     res.status(200).json({ message: "Conversation name updated successfully", updatedConversation });
   } catch (error) {

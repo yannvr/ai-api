@@ -5,6 +5,7 @@ import { conversation as createConversation, getConversationById, getConversatio
 import { fetchQuote } from './api/fetchQuote';
 import { sendPrompt } from './api/sendPrompt';
 import { updateConversationName } from './api/name';
+import { updateSettings } from './api/user-settings';
 import corsMiddleware from './middleware/cors';
 
 dotenv.config();
@@ -28,6 +29,7 @@ app.post('/sendPrompt', sendPrompt);
 app.get('/fetchQuote', fetchQuote);
 
 app.put('/conversation/name', updateConversationName);
+app.post('/settings', updateSettings);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
