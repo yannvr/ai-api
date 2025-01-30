@@ -1,4 +1,3 @@
-import { Request, Response } from 'express';
 import {
   DeleteItemCommand,
   GetItemCommand,
@@ -11,10 +10,11 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import dotenv from "dotenv";
+import { Request, Response } from 'express';
 import { v4 as uuidv4 } from "uuid";
 import { Bot, Conversation, Message } from "./ai-bot";
 import { dynamoDBClient } from "./dynamoDBClient";
-import { ContentBlock } from "@anthropic-ai/sdk/resources";
+import { log, error } from "../utils/logger";
 
 // Load environment variables
 dotenv.config();
@@ -30,13 +30,13 @@ export const saveConversation = async (conversation: Conversation): Promise<stri
     }),
   };
 
-  console.log("SAVING CONVERSATION:", conversationId);
+  log("SAVING CONVERSATION:", conversationId);
 
   try {
     await dynamoDBClient.send(new PutItemCommand(params));
     return conversationId;
-  } catch (error) {
-    console.error("Error saving conversation:", error);
+  } catch (err) {
+    error("Error saving conversation:", err);
     throw new Error("Failed to save conversation");
   }
 };
@@ -59,13 +59,9 @@ export const getConversation = async (
       const conversation = unmarshall(data.Item) as Conversation;
       return conversation;
     }
-  } catch (error: unknown) {
-    if (error instanceof Error && error.name === "ResourceNotFoundException") {
-      console.warn("Resource not found:", error.message);
-    } else {
-      console.error("Error getting conversation:", error);
-      throw new Error("Failed to get conversation");
-    }
+  } catch (err) {
+    error("Error getting conversation:", err);
+    throw new Error("Failed to get conversation");
   }
 };
 
@@ -159,7 +155,6 @@ export const getConversationById = async (req: Request, res: Response) => {
   const { conversationId } = req.query; // Extract id from query parameters
 
   try {
-    console.log("🚀 ~ getConversationById ~ conversationId", conversationId);
     if (!conversationId) {
       return res.status(400).json({ message: "conversationId is required" });
     }
@@ -196,7 +191,7 @@ export const conversation = async (req: Request, res: Response) => {
       // push the AI response message to the conversation
       const response = await bot.send(newConversation);
       newConversation.messages.push(response);
-      console.log('new conversation with response:', newConversation);
+      log('new conversation with response:', newConversation);
 
       const newConversationId = await saveConversation(newConversation);
       res
@@ -208,7 +203,7 @@ export const conversation = async (req: Request, res: Response) => {
     }
   } else {
     try {
-      console.log('continuing conversation:', conversationId);
+      log('continuing conversation:', conversationId);
       const conversation = await getConversation(conversationId);
       if (!conversation) {
         return res.status(404).json({ message: "Conversation not found" });
@@ -217,7 +212,7 @@ export const conversation = async (req: Request, res: Response) => {
       // push the user message to the conversation
       conversation.messages.push({ role: "user", content: { type: "text", text: prompt } });
       // push the AI response message to the conversation
-      console.log('conversation:', conversation);
+      log('conversation:', conversation);
       const response = await bot.send(conversation);
       conversation.messages.push(response);
 

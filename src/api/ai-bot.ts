@@ -3,6 +3,7 @@
 import axios from 'axios';
 import { Anthropic } from '@anthropic-ai/sdk';
 import { MessageParam, Message as AnthropicMessage, ContentBlock, ImageBlockParam, TextBlockParam, ToolResultBlockParam, ToolUseBlockParam } from '@anthropic-ai/sdk/resources';
+import { log } from '../utils/logger';
 
 export type Role = 'user' | 'assistant';
 
@@ -43,9 +44,6 @@ export class Bot {
       role: msg.role,
       content: Array.isArray(msg.content) ? msg.content : [msg.content] as (TextBlockParam | ImageBlockParam | ToolUseBlockParam | ToolResultBlockParam)[],
     }));
-    console.log("🚀 ~ Bot ~ constanthropicMessages:MessageParam[]=messages.map ~ anthropicMessages:", anthropicMessages)
-
-
 
     const response: AnthropicMessage = await anthropic.messages.create({
       // https://docs.anthropic.com/en/docs/about-claude/models
@@ -58,7 +56,7 @@ export class Bot {
       max_tokens: 1024,
     });
 
-    console.log('response', response);
+    log('Anthropic response:', response);
 
     return {
       role: 'assistant',

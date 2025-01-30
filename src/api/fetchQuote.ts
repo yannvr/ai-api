@@ -7,7 +7,6 @@ export const fetchQuote = async (req, res) => {
         'Content-Type': 'application/json',
       },
     })
-    console.log('response', response)
     res.status(200).send(response.data)
   } catch (error) {
     console.error('Error fetching the quote:', error)

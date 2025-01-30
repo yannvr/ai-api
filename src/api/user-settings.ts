@@ -1,5 +1,6 @@
 import { GetItemCommand, PutItemCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { dynamoDBClient } from "./dynamoDBClient";
+import { log } from "../utils/logger";
 
 export const updateSettings = async (req, res) => {
   const { userId, settings } = req.body;
@@ -14,7 +15,7 @@ export const updateSettings = async (req, res) => {
     const user = await dynamoDBClient.send(new GetItemCommand(getUserParams));
 
     if (!user.Item) {
-      console.log("🚀 ~ updateSettings ~ search:", user);
+      log("🚀 ~ updateSettings ~ search:", user);
       // User not found, create new user
       const createUserParams = {
         TableName: "conversations",

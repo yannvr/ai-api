@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import axios from 'axios';
 import { Anthropic } from '@anthropic-ai/sdk';
+import { log } from "../utils/logger";
 
 export const sendPrompt = async (req: Request, res: Response, next: NextFunction) => {
   const { prompt, provider } = req.body;
@@ -44,7 +45,7 @@ const sendToChatGPT = async (prompt: string, apiKey: string) => {
     },
   );
 
-  console.log('response', response);
+  log('response', response);
 
   return response.data.choices[0].message.content;
 }

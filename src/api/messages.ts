@@ -7,7 +7,6 @@ import { dynamoDBClient } from "./dynamoDBClient";
 
 export const addMessage = async (req: Request, res: Response) => {
   const { conversationId, message } = req.body;
-  console.log("🚀 ~ addMessage ~ { conversationId, message }:", { conversationId, message });
 
   try {
     const conversation = await getConversation(conversationId);
