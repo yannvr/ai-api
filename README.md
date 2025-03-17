@@ -20,6 +20,19 @@ To install dependencies:
 bun install
 ```
 
+## Environment Setup
+
+1. Copy the example environment file to create your own:
+
+```bash
+cp .env.example .env
+```
+
+2. Edit the `.env` file with your actual API keys and credentials:
+   - `OPENAI_API_KEY`: Your OpenAI API key
+   - `ANTHROPIC_API_KEY`: Your Anthropic (Claude) API key
+   - `CONF_AWS_ACCESS_KEY_ID`, `CONF_AWS_SECRET_ACCESS_KEY`, `CONF_AWS_REGION`: Your AWS credentials for DynamoDB access
+
 ## Running the Server
 
 To run the server:
